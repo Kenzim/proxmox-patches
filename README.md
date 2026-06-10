@@ -2,27 +2,26 @@
 
 Local patches for Proxmox VE that have not yet been merged upstream.
 
+**Repository:** https://git.stackken.com/kenzim/proxmox-patches  
+*(mirrored to GitHub)*
+
 ---
 
 ## Quick Start
-
-> **Substitute your own repo URL** — no remote is configured yet.  
-> Replace `https://github.com/YOUR_ORG/proxmox-patches.git` with the actual URL
-> before sharing these one-liners.
 
 All commands must be run as **root** (or via `sudo`) on a Proxmox node.
 
 ### 1 — Clone and apply all patches
 
 ```bash
-git clone https://github.com/YOUR_ORG/proxmox-patches.git /opt/proxmox-patches \
+git clone https://git.stackken.com/kenzim/proxmox-patches.git /opt/proxmox-patches \
   && bash /opt/proxmox-patches/apply.sh
 ```
 
 ### 2 — Clone, apply patches, and install the dpkg hook
 
 ```bash
-git clone https://github.com/YOUR_ORG/proxmox-patches.git /opt/proxmox-patches \
+git clone https://git.stackken.com/kenzim/proxmox-patches.git /opt/proxmox-patches \
   && bash /opt/proxmox-patches/apply.sh \
   && bash /opt/proxmox-patches/install-hook.sh
 ```
@@ -39,13 +38,13 @@ previously-cloned copy served over HTTP, or install git first:
 ```bash
 # Option A: install git, then clone
 apt-get install -y git \
-  && git clone https://github.com/YOUR_ORG/proxmox-patches.git /opt/proxmox-patches \
+  && git clone https://git.stackken.com/kenzim/proxmox-patches.git /opt/proxmox-patches \
   && bash /opt/proxmox-patches/apply.sh
 
-# Option B: curl a tarball (GitHub example — adjust to your host)
-curl -fsSL https://github.com/YOUR_ORG/proxmox-patches/archive/refs/heads/main.tar.gz \
+# Option B: curl a tarball directly from Forgejo
+curl -fsSL https://git.stackken.com/kenzim/proxmox-patches/archive/main.tar.gz \
   | tar -xz -C /opt \
-  && mv /opt/proxmox-patches-main /opt/proxmox-patches \
+  && mv /opt/proxmox-patches /opt/proxmox-patches-repo 2>/dev/null || true \
   && bash /opt/proxmox-patches/apply.sh
 ```
 
