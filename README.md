@@ -24,12 +24,12 @@ git clone https://github.com/YOUR_ORG/proxmox-patches.git /opt/proxmox-patches \
 ```bash
 git clone https://github.com/YOUR_ORG/proxmox-patches.git /opt/proxmox-patches \
   && bash /opt/proxmox-patches/apply.sh \
-  && cp /opt/proxmox-patches/apply.sh /etc/apt/apt.conf.d/../.. # placeholder — add hook step here
+  && bash /opt/proxmox-patches/install-hook.sh
 ```
 
-> **Note:** A dpkg / apt hook that auto-re-applies patches after upgrades is not
-> yet included in this repo. Once added, replace the placeholder above with the
-> real hook-install command (e.g. `install -m755 hooks/apt-post apply.sh …`).
+The hook installs a dpkg post-invoke script that automatically re-applies any
+patches overwritten by a package upgrade. See [install-hook.sh](#install-hooksh)
+below for details.
 
 ### 3 — One-liner for nodes without git
 
@@ -56,9 +56,10 @@ tracking file so existing VM IDs are never reused:
 bash /opt/proxmox-patches/prime.sh
 ```
 
-Re-run `apply.sh --check` after any `pve-manager`, `qemu-server`,
-`pve-container`, `libpve-cluster-perl`, or `libpve-access-control` upgrade to
-detect patches that need re-applying.
+Re-run `apply.sh` after any `pve-manager`, `qemu-server`, `pve-container`,
+`libpve-cluster-perl`, or `libpve-access-control` upgrade to re-apply patches
+that were overwritten. Or install `install-hook.sh` to have this happen
+automatically.
 
 ---
 
@@ -126,13 +127,18 @@ our patches, and the upstream version will be strictly better.
 ### Installation
 
 Run `apply.sh` (see [Scripts](#scripts) below) to apply all patches, then
-optionally run `prime.sh` to seed the VMID tracking file.
+optionally run `prime.sh` to seed the VMID tracking file. To keep patches
+applied automatically after upgrades, also run `install-hook.sh`.
 
 ### After a package upgrade
 
-Proxmox upgrades overwrite patched files. Re-run `apply.sh --check` after
-upgrading `pve-manager`, `qemu-server`, `pve-container`, `libpve-cluster-perl`,
-or `libpve-access-control` to detect which patches need re-applying.
+Proxmox upgrades overwrite patched files. Re-run `apply.sh` after upgrading
+`pve-manager`, `qemu-server`, `pve-container`, `libpve-cluster-perl`, or
+`libpve-access-control` to re-apply any patches that were overwritten.
+
+If you have installed `install-hook.sh`, this happens automatically — the hook
+runs `apply.sh --auto` after every apt/dpkg operation and logs any re-application
+to syslog via `logger -t proxmox-patches`.
 
 ### Tested on
 
@@ -185,14 +191,44 @@ Required token permissions:
 Applies all patches in the repo (or checks whether they are already applied).
 
 ```bash
-sudo bash apply.sh          # apply all patches
+sudo bash apply.sh          # apply all patches (verbose, interactive)
 sudo bash apply.sh --check  # preflight check only — no files modified
+sudo bash apply.sh --auto   # silent hook mode (see below)
 ```
 
 | Flag | Effect |
 |------|--------|
 | _(none)_ | Applies every patch set in sequence, then restarts `pvedaemon` and `pveproxy`. Also primes `/etc/pve/used_vmids.list` with all existing VMIDs on first run. |
 | `--check` | Runs the preflight checks and exits without making any changes. Useful after a package upgrade to see which patches need re-applying. |
+| `--auto` | Silent dpkg hook mode. Exits 0 with no output if all patches are already applied. If any patches are missing (e.g. after a package upgrade overwrote them), re-applies everything, restarts services, and logs a summary line to syslog via `logger -t proxmox-patches`. Does not re-prime `used_vmids.list`. |
+
+Check the syslog for `--auto` activity after package upgrades:
+
+```bash
+journalctl -t proxmox-patches
+```
+
+### `install-hook.sh`
+
+Installs a dpkg post-invoke hook so patches are re-applied automatically after
+any apt/dpkg package operation.
+
+```bash
+sudo bash install-hook.sh
+```
+
+Idempotent — safe to re-run. What it does:
+
+1. Writes `/usr/local/bin/proxmox-patches-auto.sh` — a wrapper that calls
+   `apply.sh --auto` with the correct repo path.
+2. Writes `/etc/apt/apt.conf.d/99proxmox-patches` — tells apt to run the wrapper
+   as a `DPkg::Post-Invoke` hook after every package operation.
+3. Runs the hook once immediately to verify it works.
+
+After this, whenever a Proxmox package upgrade overwrites a patched file,
+`apply.sh --auto` fires automatically, re-applies the patches, restarts
+`pvedaemon`/`pveproxy`, and logs the event to syslog. No manual intervention
+needed.
 
 ### `prime.sh`
 
