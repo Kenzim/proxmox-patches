@@ -67,20 +67,8 @@ our patches, and the upstream version will be strictly better.
 
 ### Installation
 
-Each patch set has its own `apply.sh`. To apply everything:
-
-```bash
-sudo bash apply.sh [--check]
-```
-
-To apply a single patch set:
-
-```bash
-sudo bash patches/vmid-noreuse/apply.sh [--check]
-sudo bash patches/api-key-change-password/apply.sh [--check]
-```
-
-`--check` runs preflight only — no files modified.
+Run `apply.sh` (see [Scripts](#scripts) below) to apply all patches, then
+optionally run `prime.sh` to seed the VMID tracking file.
 
 ### After a package upgrade
 
@@ -129,3 +117,43 @@ curl -X PUT https://<host>:8006/api2/json/access/password \
 Required token permissions:
 - `Realm.AllocateUser` on `/access/realm/<realm>`
 - `User.Modify` on `/access/groups/<group>` (where target user is a member)
+
+---
+
+## Scripts
+
+### `apply.sh`
+
+Applies all patches in the repo (or checks whether they are already applied).
+
+```bash
+sudo bash apply.sh          # apply all patches
+sudo bash apply.sh --check  # preflight check only — no files modified
+```
+
+| Flag | Effect |
+|------|--------|
+| _(none)_ | Applies every patch set in sequence, then restarts `pvedaemon` and `pveproxy`. Also primes `/etc/pve/used_vmids.list` with all existing VMIDs on first run. |
+| `--check` | Runs the preflight checks and exits without making any changes. Useful after a package upgrade to see which patches need re-applying. |
+
+### `prime.sh`
+
+Seeds `/etc/pve/used_vmids.list` with all VMIDs that currently exist across the
+cluster. Run this on any node, any time — it is safe to re-run (idempotent).
+
+Useful for:
+- A new node joining a cluster where `apply.sh` has already been run elsewhere
+- Re-syncing the list after importing VMs from backup or migration
+- Verifying the list is up to date
+
+```bash
+sudo bash prime.sh            # merge cluster VMIDs into used_vmids.list
+sudo bash prime.sh --dry-run  # show what would be added, write nothing
+```
+
+| Flag | Effect |
+|------|--------|
+| _(none)_ | Reads the existing `used_vmids.list` and adds any cluster VMIDs not yet tracked. Prints a summary of cluster count, already-tracked count, and newly added count. |
+| `--dry-run` | Same logic, but prints what would be added without writing anything. |
+
+Requires `PVE::UsedVmidList` to be installed — run `apply.sh` first.
