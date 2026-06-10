@@ -6,8 +6,35 @@ New module PVE::UsedVmidList — reads and writes /etc/pve/used_vmids.list,
 which tracks VMIDs that have ever existed so they will not be re-suggested
 by /cluster/nextid when unique-next-id is enabled.
 
-The file format supports individual IDs and compact ranges (e.g. 100-199)
-and uses flock for safe concurrent writes.
+NOTE: This patch file documents our LOCAL ADAPTATION, not the exact upstream
+patch. The key difference:
+
+  Upstream (Severen's v4): Uses PVE::Cluster::cfs_register_file /
+  cfs_lock_file / cfs_read_file / cfs_write_file, which requires also
+  patching Cluster.pm ($observed hash) and pmxcfs/status.c (C daemon) —
+  both of which require recompiling packages from source.
+
+  This adaptation: Uses direct file I/O + flock on /etc/pve/used_vmids.list
+  (which is on the pmxcfs FUSE mount, so writes still propagate cluster-wide)
+  to avoid any source compilation. The tradeoff is no cfs_lock_file semantics
+  and no change-notification broadcast, which is acceptable for this use case.
+
+The upstream UsedVmidList.pm for reference:
+
+  package PVE::UsedVmidList;
+  use PVE::Cluster;
+  my $read_id_list = sub { ... };   # parses raw text
+  my $write_id_list = sub { ... };  # serialises to text
+  PVE::Cluster::cfs_register_file('used_vmids.list', $read_id_list, $write_id_list);
+  sub add_vmid {
+      PVE::Cluster::cfs_lock_file('used_vmids.list', 10, sub {
+          my $used_ids = PVE::Cluster::cfs_read_file('used_vmids.list');
+          $used_ids->{$vmid} = 1;
+          PVE::Cluster::cfs_write_file('used_vmids.list', $used_ids);
+      });
+  }
+
+Our adaptation (what apply.sh actually installs):
 
 --- /dev/null
 +++ b/usr/share/perl5/PVE/UsedVmidList.pm

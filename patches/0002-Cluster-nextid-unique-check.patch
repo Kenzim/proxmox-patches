@@ -6,6 +6,12 @@ Modify the /cluster/nextid endpoint so that when unique-next-id is enabled
 in the datacenter config, it skips any VMID present in used_vmids.list in
 addition to currently-in-use IDs.
 
+NOTE: The logic in this patch is identical to upstream. The only difference
+is the call to read the used-IDs list:
+  Upstream:   PVE::Cluster::cfs_read_file('used_vmids.list')
+  This patch: PVE::UsedVmidList::get_used_ids()
+(because our UsedVmidList.pm uses direct I/O rather than the cfs API)
+
 --- a/usr/share/perl5/PVE/API2/Cluster.pm
 +++ b/usr/share/perl5/PVE/API2/Cluster.pm
 @@ use PVE::Tools qw(extract_param);

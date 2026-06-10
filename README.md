@@ -43,6 +43,28 @@ explicitly enable it.
 | 0005 | `PVE/API2/LXC.pm` | Record VMID in list before destroying a container |
 | 0006 | `pve-manager/js/pvemanagerlib.js` | Add "Suggest unique VMIDs" checkbox to Datacenter → Options |
 
+### Divergence from upstream patches
+
+Patches 0003–0006 are **identical** to Severen's v4 patches.
+
+Patches 0001–0002 are **functionally equivalent but use a different storage
+mechanism.** Severen's original `UsedVmidList.pm` uses the pmxcfs cluster
+filesystem API (`cfs_register_file` / `cfs_lock_file` / `cfs_read_file` /
+`cfs_write_file`), which also requires two further patches:
+
+- `src/PVE/Cluster.pm` — add `used_vmids.list` to the `$observed` hash
+- `src/pmxcfs/status.c` — register the path in the C pmxcfs daemon
+
+Both of those require **recompiling packages from source**, which isn't
+practical for a live deployment. This adaptation instead uses direct file I/O
+with `flock` on `/etc/pve/used_vmids.list`. Since `/etc/pve` is the pmxcfs
+FUSE mount, writes still propagate cluster-wide — the tradeoff is no
+`cfs_lock_file` semantics and no change-notification broadcast, which is
+acceptable for the infrequent writes this feature generates.
+
+If/when Proxmox merge this upstream, reinstalling the packages will replace
+our patches, and the upstream version will be strictly better.
+
 ### Installation
 
 Run as root on each node (or run once on any node — `used_vmids.list` lives
