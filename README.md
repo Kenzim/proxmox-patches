@@ -67,50 +67,65 @@ our patches, and the upstream version will be strictly better.
 
 ### Installation
 
-Run as root on each node (or run once on any node — `used_vmids.list` lives
-on the shared cluster filesystem):
+Each patch set has its own `apply.sh`. To apply everything:
 
 ```bash
-sudo bash apply.sh
+sudo bash apply.sh [--check]
 ```
 
-The script will:
-1. Run preflight checks — verifies every patch target exists before touching anything
-2. Apply all 6 patches (idempotent — safe to re-run after package updates)
-3. Run Perl syntax checks on all modified files
-4. Prime `used_vmids.list` with all currently existing VMIDs
-5. Restart `pvedaemon` and `pveproxy`
-
-To check compatibility without making any changes:
+To apply a single patch set:
 
 ```bash
-sudo bash apply.sh --check
+sudo bash patches/vmid-noreuse/apply.sh [--check]
+sudo bash patches/api-key-change-password/apply.sh [--check]
 ```
 
-### Enabling the feature
-
-After installing, enable it cluster-wide:
-
-```bash
-pvesh set /cluster/options --unique-next-id 1
-```
-
-Or via the web UI: **Datacenter → Options → Suggest unique VMIDs** (hard-refresh
-the browser after installing the patch).
+`--check` runs preflight only — no files modified.
 
 ### After a package upgrade
 
-Proxmox package upgrades will overwrite the patched files. Re-run `apply.sh`
-after any upgrade to `pve-manager`, `qemu-server`, `pve-container`, or
-`libpve-cluster-perl`. The `used_vmids.list` file is untouched by upgrades.
-
-To check whether the current installation needs re-patching:
-
-```bash
-sudo bash apply.sh --check
-```
+Proxmox upgrades overwrite patched files. Re-run `apply.sh --check` after
+upgrading `pve-manager`, `qemu-server`, `pve-container`, `libpve-cluster-perl`,
+or `libpve-access-control` to detect which patches need re-applying.
 
 ### Tested on
 
 - PVE 9.2.3 / Debian 13 Trixie
 - Ceph 20.2.1 Tentacle
+
+---
+
+## Patch: API key password change
+
+### What it does
+
+By default Proxmox blocks API tokens from calling `PUT /access/password`
+(`allowtoken => 0`). This patch lifts that restriction and also removes
+the confirmation-password re-authentication requirement for tokens (tokens
+are already authenticated by their secret — requiring a password
+re-confirmation is both impossible and unnecessary for automation).
+
+**Security model:** The existing ACL permission checks still apply. A token
+must have either `['userid-param', 'self']` or
+`Realm.AllocateUser + User.Modify` to change any password.
+PAM realm passwords remain blocked (existing code check).
+
+### Files changed
+
+| Patch | File | Change |
+|-------|------|--------|
+| 0001 | `PVE/API2/AccessControl.pm` | `allowtoken => 0` → `allowtoken => 1` on `change_password` |
+| 0002 | `PVE/RPCEnvironment.pm` | Skip password re-auth in `reauth_user_for_user_modification` when caller is a token |
+
+### Usage after applying
+
+```bash
+curl -X PUT https://<host>:8006/api2/json/access/password \
+  -H 'Authorization: PVEAPIToken=user@realm!tokenname=<secret>' \
+  -d userid=target@pve \
+  -d password=newpassword
+```
+
+Required token permissions:
+- `Realm.AllocateUser` on `/access/realm/<realm>`
+- `User.Modify` on `/access/groups/<group>` (where target user is a member)

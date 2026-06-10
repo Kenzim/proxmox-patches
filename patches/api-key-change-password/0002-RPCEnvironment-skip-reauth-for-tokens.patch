@@ -1,0 +1,48 @@
+Subject: [PATCH] RPCEnvironment: skip confirmation-password re-auth for API tokens
+
+reauth_user_for_user_modification requires the caller to provide their own
+password as a confirmation before modifying a user. This is a sensible
+interactive-session safeguard, but API tokens are already authenticated by
+the token secret — requiring a password re-confirmation makes tokens
+unable to perform user modifications at all.
+
+This patch detects when the authuser is an API token (user@realm!tokenname)
+and skips the password re-authentication in that case. The normal ACL
+permission checks (Realm.AllocateUser + User.Modify) still apply and must
+pass before this function is reached.
+
+--- a/usr/share/perl5/PVE/RPCEnvironment.pm
++++ b/usr/share/perl5/PVE/RPCEnvironment.pm
+@@ reauth_user_for_user_modification:
+-    # Regular users need to confirm their password to change TFA settings.
+-    if ($authuser ne 'root@pam') {
+-        raise_param_exc({ $param_name => 'password is required to modify user' })
+-            if !defined($password);
+-
+-        ($authuser, my $auth_username, my $auth_realm) =
+-            PVE::AccessControl::verify_username($authuser);
+-
+-        my $domain_cfg = PVE::Cluster::cfs_read_file('domains.cfg');
+-        my $cfg = $domain_cfg->{ids}->{$auth_realm};
+-        die "auth domain '$auth_realm' does not exist\n" if !$cfg;
+-        my $plugin = PVE::Auth::Plugin->lookup($cfg->{type});
+-        $plugin->authenticate_user($cfg, $auth_realm, $auth_username, $password);
+-    }
++    # Regular users need to confirm their password to change TFA/user settings.
++    # API tokens are already authenticated by the token secret — skip re-auth.
++    if ($authuser ne 'root@pam') {
++        my (undef, $token_name) = PVE::AccessControl::split_tokenid($authuser, 1);
++        if (!defined($token_name)) {
++            raise_param_exc({ $param_name => 'password is required to modify user' })
++                if !defined($password);
++
++            ($authuser, my $auth_username, my $auth_realm) =
++                PVE::AccessControl::verify_username($authuser);
++
++            my $domain_cfg = PVE::Cluster::cfs_read_file('domains.cfg');
++            my $cfg = $domain_cfg->{ids}->{$auth_realm};
++            die "auth domain '$auth_realm' does not exist\n" if !$cfg;
++            my $plugin = PVE::Auth::Plugin->lookup($cfg->{type});
++            $plugin->authenticate_user($cfg, $auth_realm, $auth_username, $password);
++        }
++    }
