@@ -1,0 +1,22 @@
+From: Severen Redwood <severen.redwood@sitehost.co.nz>
+Co-authored-by: Daniel Krambrock <krambrock@hrz.uni-marburg.de>
+Subject: [PATCH cluster v4 2/2] datacenter config: add unique-next-id to schema
+
+Add the unique-next-id boolean property to the datacenter config schema.
+When set, the /cluster/nextid API endpoint will avoid suggesting any VMID
+that is currently in use or has previously been used.
+
+--- a/usr/share/perl5/PVE/DataCenterConfig.pm
++++ b/usr/share/perl5/PVE/DataCenterConfig.pm
+@@ 'next-id' schema entry:
+         'next-id' => {
+             optional => 1,
+             type => 'string',
+             format => $next_id_format,
+             description => "Control the range for the free VMID auto-selection pool.",
+         },
++        'unique-next-id' => {
++            optional => 1,
++            type => 'boolean',
++            description => "Only suggest VMIDs that are neither currently in use nor have previously been used.",
++        },

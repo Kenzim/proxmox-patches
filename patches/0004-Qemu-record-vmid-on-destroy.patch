@@ -1,0 +1,21 @@
+From: Severen Redwood <severen.redwood@sitehost.co.nz>
+Co-authored-by: Daniel Krambrock <krambrock@hrz.uni-marburg.de>
+Subject: [PATCH qemu-server v4] api: record VM ID as used after a virtual machine is destroyed
+
+Record the VMID in used_vmids.list immediately before removing the VM
+config, so the ID is never re-suggested by /cluster/nextid when
+unique-next-id is enabled. Placed before destroy_config to avoid a
+race where the ID could be re-used before being recorded.
+
+--- a/usr/share/perl5/PVE/API2/Qemu.pm
++++ b/usr/share/perl5/PVE/API2/Qemu.pm
+@@ use PVE::RESTEnvironment qw(log_warn);
++use PVE::UsedVmidList;
+
+@@ VM destruction, before destroy_config:
+-                    # only now remove the zombie config, else we can have reuse race
+-                    PVE::QemuConfig->destroy_config($vmid);
++                    # only now mark the VM ID as previously used and remove the
++                    # zombie config, else we can have reuse race
++                    PVE::UsedVmidList::add_vmid($vmid);
++                    PVE::QemuConfig->destroy_config($vmid);

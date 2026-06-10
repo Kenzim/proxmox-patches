@@ -1,0 +1,96 @@
+From: Severen Redwood <severen.redwood@sitehost.co.nz>
+Co-authored-by: Daniel Krambrock <krambrock@hrz.uni-marburg.de>
+Subject: [PATCH cluster v4 1/2] cluster files: add used_vmids.list
+
+New module PVE::UsedVmidList — reads and writes /etc/pve/used_vmids.list,
+which tracks VMIDs that have ever existed so they will not be re-suggested
+by /cluster/nextid when unique-next-id is enabled.
+
+The file format supports individual IDs and compact ranges (e.g. 100-199)
+and uses flock for safe concurrent writes.
+
+--- /dev/null
++++ b/usr/share/perl5/PVE/UsedVmidList.pm
+@@ -0,0 +1,72 @@
++package PVE::UsedVmidList;
++
++use strict;
++use warnings;
++
++use Fcntl qw(:flock);
++
++my $list_path = '/etc/pve/used_vmids.list';
++my $lock_path = '/var/lock/pve-used-vmids.lock';
++
++sub get_used_ids {
++    my $used_ids = {};
++
++    return $used_ids if !-e $list_path;
++
++    open(my $fh, '<', $list_path) or return $used_ids;
++    while (my $line = <$fh>) {
++	chomp $line;
++	next if $line =~ m/^\s*$/ || $line =~ m/^#/;
++	if ($line =~ m/^(\d+)$/) {
++	    $used_ids->{$1} = 1;
++	} elsif ($line =~ m/^(\d+)-(\d+)$/) {
++	    $used_ids->{$_} = 1 for ($1 .. $2);
++	} else {
++	    warn "Skipping invalid entry in used_vmids.list: $line\n";
++	}
++    }
++    close($fh);
++
++    return $used_ids;
++}
++
++my $write_used_ids = sub {
++    my ($used_ids) = @_;
++
++    my @ids = sort { $a <=> $b } keys %$used_ids;
++    my @lines;
++    my $len = scalar(@ids);
++
++    for (my $i = 0; $i < $len; $i++) {
++	my $j = $i;
++	while ($j + 1 < $len && $ids[$j] + 1 == $ids[$j + 1]) {
++	    $j++;
++	}
++	if ($i != $j) {
++	    push @lines, "$ids[$i]-$ids[$j]";
++	} else {
++	    push @lines, "$ids[$i]";
++	}
++	$i = $j;
++    }
++
++    open(my $fh, '>', $list_path) or die "failed to write $list_path: $!\n";
++    print $fh join("\n", @lines) . "\n" if @lines;
++    close($fh);
++};
++
++sub _write_used_ids_direct {
++    my ($used_ids) = @_;
++    $write_used_ids->($used_ids);
++}
++
++sub add_vmid {
++    my ($vmid) = @_;
++
++    open(my $lock_fh, '>', $lock_path) or die "failed to open lock file $lock_path: $!\n";
++    flock($lock_fh, LOCK_EX) or die "failed to acquire lock: $!\n";
++
++    eval {
++	my $used_ids = get_used_ids();
++	$used_ids->{$vmid} = 1;
++	$write_used_ids->($used_ids);
++    };
++    my $err = $@;
++
++    flock($lock_fh, LOCK_UN);
++    close($lock_fh);
++
++    die $err if $err;
++}
++
++1;

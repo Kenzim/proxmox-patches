@@ -1,0 +1,20 @@
+From: Severen Redwood <severen.redwood@sitehost.co.nz>
+Co-authored-by: Daniel Krambrock <krambrock@hrz.uni-marburg.de>
+Subject: [PATCH container v4] api: record CT ID as used after a container is destroyed
+
+Mirror of the qemu-server change: record the VMID in used_vmids.list
+immediately before removing the container config so the ID is never
+re-suggested when unique-next-id is enabled.
+
+--- a/usr/share/perl5/PVE/API2/LXC.pm
++++ b/usr/share/perl5/PVE/API2/LXC.pm
+@@ use PVE::RESTHandler;
++use PVE::UsedVmidList;
+
+@@ CT destruction, before destroy_config:
+-            # only now remove the zombie config, else we can have reuse race
+-            PVE::LXC::Config->destroy_config($vmid);
++            # only now mark the CT ID as previously used and remove the zombie
++            # config, else we can have reuse race
++            PVE::UsedVmidList::add_vmid($vmid);
++            PVE::LXC::Config->destroy_config($vmid);

@@ -1,0 +1,42 @@
+From: Severen Redwood <severen.redwood@sitehost.co.nz>
+Co-authored-by: Daniel Krambrock <krambrock@hrz.uni-marburg.de>
+Subject: [PATCH manager v4 1/2] close #4369: api: optionally only suggest unique IDs
+
+Modify the /cluster/nextid endpoint so that when unique-next-id is enabled
+in the datacenter config, it skips any VMID present in used_vmids.list in
+addition to currently-in-use IDs.
+
+--- a/usr/share/perl5/PVE/API2/Cluster.pm
++++ b/usr/share/perl5/PVE/API2/Cluster.pm
+@@ use PVE::Tools qw(extract_param);
++use PVE::UsedVmidList;
+
+@@ nextid logic in get handler:
+-        my $next_id = $dc_conf->{'next-id'} // {};
+-
+-        my $lower = $next_id->{lower} // 100;
+-        my $upper = $next_id->{upper} // (1000 * 1000); # note, lower than the schema-maximum
+-
+-        for (my $i = $lower; $i < $upper; $i++) {
+-            return $i if !defined($idlist->{$i});
+-        }
+-
+-        die "unable to get any free VMID in range [$lower, $upper]\n";
++        my $next_id = $dc_conf->{'next-id'} // {};
++        my $want_unique = $dc_conf->{'unique-next-id'} // 0;
++
++        my $lower = $next_id->{lower} // 100;
++        my $upper = $next_id->{upper} // (1000 * 1000); # note, lower than the schema-maximum
++
++        if ($want_unique) {
++            my $used_ids = PVE::UsedVmidList::get_used_ids();
++            for (my $i = $lower; $i < $upper; $i++) {
++                return $i if !defined($idlist->{$i}) && !defined($used_ids->{$i});
++            }
++        } else {
++            for (my $i = $lower; $i < $upper; $i++) {
++                return $i if !defined($idlist->{$i});
++            }
++        }
++
++        die "unable to get any free VMID in range [$lower, $upper]\n";
