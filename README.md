@@ -4,6 +4,64 @@ Local patches for Proxmox VE that have not yet been merged upstream.
 
 ---
 
+## Quick Start
+
+> **Substitute your own repo URL** — no remote is configured yet.  
+> Replace `https://github.com/YOUR_ORG/proxmox-patches.git` with the actual URL
+> before sharing these one-liners.
+
+All commands must be run as **root** (or via `sudo`) on a Proxmox node.
+
+### 1 — Clone and apply all patches
+
+```bash
+git clone https://github.com/YOUR_ORG/proxmox-patches.git /opt/proxmox-patches \
+  && bash /opt/proxmox-patches/apply.sh
+```
+
+### 2 — Clone, apply patches, and install the dpkg hook
+
+```bash
+git clone https://github.com/YOUR_ORG/proxmox-patches.git /opt/proxmox-patches \
+  && bash /opt/proxmox-patches/apply.sh \
+  && cp /opt/proxmox-patches/apply.sh /etc/apt/apt.conf.d/../.. # placeholder — add hook step here
+```
+
+> **Note:** A dpkg / apt hook that auto-re-applies patches after upgrades is not
+> yet included in this repo. Once added, replace the placeholder above with the
+> real hook-install command (e.g. `install -m755 hooks/apt-post apply.sh …`).
+
+### 3 — One-liner for nodes without git
+
+If the node has `curl` but not `git`, fetch and run `apply.sh` directly from a
+previously-cloned copy served over HTTP, or install git first:
+
+```bash
+# Option A: install git, then clone
+apt-get install -y git \
+  && git clone https://github.com/YOUR_ORG/proxmox-patches.git /opt/proxmox-patches \
+  && bash /opt/proxmox-patches/apply.sh
+
+# Option B: curl a tarball (GitHub example — adjust to your host)
+curl -fsSL https://github.com/YOUR_ORG/proxmox-patches/archive/refs/heads/main.tar.gz \
+  | tar -xz -C /opt \
+  && mv /opt/proxmox-patches-main /opt/proxmox-patches \
+  && bash /opt/proxmox-patches/apply.sh
+```
+
+After applying patches on the **first** node in a cluster, seed the VMID
+tracking file so existing VM IDs are never reused:
+
+```bash
+bash /opt/proxmox-patches/prime.sh
+```
+
+Re-run `apply.sh --check` after any `pve-manager`, `qemu-server`,
+`pve-container`, `libpve-cluster-perl`, or `libpve-access-control` upgrade to
+detect patches that need re-applying.
+
+---
+
 ## Patch: VMID non-reuse (`unique-next-id`)
 
 **Proxmox bug:** [#4369](https://bugzilla.proxmox.com/show_bug.cgi?id=4369)  
