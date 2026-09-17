@@ -24,7 +24,7 @@ RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'; BOLD=$'\033[1m'; N
 
 QUIET=0
 
-ok()     { [ "$QUIET" -eq 0 ] && echo "  ${GREEN}OK${NC}    $*" || true; }
+ok()     { [ "$QUIET" -eq 0 ] && echo "  ${GREEN}OK${NC}    $*" || true; NEED_APPLY=1; }
 skip()   { [ "$QUIET" -eq 0 ] && echo "  ${YELLOW}SKIP${NC}  $*" || true; }
 fail()   { [ "$QUIET" -eq 0 ] && echo "  ${RED}FAIL${NC}  $*" || true; PREFLIGHT_FAIL=1; }
 header() { [ "$QUIET" -eq 0 ] && { echo; echo "${BOLD}=== $* ===${NC}"; } || true; }
@@ -85,6 +85,7 @@ case "${1:-}" in
 esac
 
 PREFLIGHT_FAIL=0
+NEED_APPLY=0
 PERL_LIB=/usr/share/perl5/PVE
 PVE_JS=/usr/share/pve-manager/js/pvemanagerlib.js
 ACCESS=$PERL_LIB/API2/AccessControl.pm
@@ -109,7 +110,7 @@ header "Preflight checks"
 if [ -f "$PERL_LIB/UsedVmidList.pm" ]; then
     skip "  [A1] UsedVmidList.pm (already exists)"
 else
-    ok   "  [A1] UsedVmidList.pm (will create)"
+    ok "  [A1] UsedVmidList.pm (will create)"
 fi
 
 check_target "  [A2] API2/Cluster.pm — use statement" \
@@ -182,7 +183,7 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
 fi
 
 # In --auto mode with all patches already applied: nothing to do.
-if [ "$AUTO_MODE" -eq 1 ] && [ "$PREFLIGHT_FAIL" -eq 0 ]; then
+if [ "$AUTO_MODE" -eq 1 ] && [ "$PREFLIGHT_FAIL" -eq 0 ] && [ "$NEED_APPLY" -eq 0 ]; then
     exit 0
 fi
 
